@@ -49,9 +49,10 @@ export default function Donate() {
     : '';
 
   return (
-    <div className="min-h-screen w-full flex flex-col md:flex-row h-auto md:h-screen">
+    <div className="w-full flex flex-col md:flex-row items-stretch min-h-[calc(100vh-72px)]">
+
       {/* Left: Donation Block (2/3) */}
-      <div className="w-full md:w-2/3 flex items-center justify-center bg-white py-10 md:py-0">
+      <div className="w-full md:w-2/3 flex items-center justify-center bg-white py-10 md:py-12">
         <div className="w-full max-w-xl flex flex-col items-center justify-center px-4 md:px-0">
           <div className="flex flex-col md:flex-row items-start w-full mb-8 gap-4 md:gap-0">
             <div className="hidden md:block w-1.5 h-full bg-black rounded-full mr-8" style={{ minHeight: '90px' }} />
@@ -123,9 +124,16 @@ export default function Donate() {
         </div>
       </div>
       {/* Right: Gallery Image (1/3) */}
-      <div className="w-full md:w-1/3 h-56 md:h-full flex items-center justify-center">
+      <div className="w-full md:w-1/3 relative bg-white overflow-hidden">
+
         {galleryImage && (
-          <Image src={galleryImage} alt="Gallery" width={1200} height={1200} className="object-cover w-full h-full rounded-none" />
+          <Image 
+            src={galleryImage} 
+            alt="Gallery" 
+            fill
+            className="object-cover rounded-none" 
+            sizes="(max-width: 768px) 100vw, 33vw"
+          />
         )}
       </div>
     </div>
