@@ -1,18 +1,10 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a NextJS project
 
-## Getting Started
+Ensure Node.js is installed on your machine
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
+To run this on your local machine,
+1. Clone the repository
+2. run "npm install"
+3. run "npm run dev"
+4. Make a .env file and paste the following
+   
