@@ -1,0 +1,771 @@
+# TheEducationForAll — Institutional Technical Documentation
+
+**Document version:** 1.0  
+**Prepared by:** DAKB Codeworks Ltd©  
+**Date:** March 2026  
+**Project:** TheEducationForAll Official Website  
+**Developer contact:** educationforall@gmail.com
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#executive-summary)
+2. [Technology Stack](#technology-stack)
+3. [Project Structure](#project-structure)
+4. [Environment Configuration](#environment-configuration)
+5. [Architecture Overview](#architecture-overview)
+6. [Pages & User-Facing Routes](#pages--user-facing-routes)
+7. [API Reference](#api-reference)
+8. [Data Models](#data-models)
+9. [Component Library](#component-library)
+10. [Third-Party Service Integrations](#third-party-service-integrations)
+11. [Admin Panel](#admin-panel)
+12. [Security Considerations](#security-considerations)
+13. [Known Issues & Recommendations](#known-issues--recommendations)
+14. [Local Development Setup](#local-development-setup)
+
+---
+
+## 1. Executive Summary
+
+TheEducationForAll website is the official digital presence for a community-based non-governmental organisation (NGO) headquartered in Vikhroli(W), Mumbai. The site serves the following primary functions:
+
+- **Public information:** Communicates the NGO's mission, programs, and impact to a broad internet audience.
+- **Donation gateway:** Provides visitors a way to donate via UPI — displaying a dynamically-configured QR code and UPI ID pulled from a live database.
+- **Contact intake:** Collects volunteer/partnership inquiries and stores them in a database accessible by administrators.
+- **Photo gallery:** Showcases field photographs managed entirely through a cloud image pipeline.
+- **Admin backend:** A password-protected internal dashboard for operational management of gallery images, contact queries, and donation settings.
+
+The site is designed to be fully responsive across desktop and mobile, content-managed without developer intervention, and straightforward to maintain.
+
+---
+
+## 2. Technology Stack
+
+| Layer | Technology | Version |
+|---|---|---|
+| Framework | Next.js (App Router) | 15.3.8 |
+| Runtime | Node.js | ≥18 |
+| Language | TypeScript | ^5 |
+| Styling | TailwindCSS  | ^4 |
+| CSS Processor | PostCSS | ^4 |
+| Font | Inter (Google Fonts) | Variable |
+| Icon Library | React-Icons (`react-icons/fi`) | ^5.5.0 |
+| UI Framework | React | ^19.0.0 |
+| Database | MongoDB Atlas | Native driver ^6.16.0 |
+| Image CDN | Cloudinary | SDK ^2.6.1 |
+| Payment Processing | Razorpay *(Package present, UPI flow active)* | ^2.9.6 |
+| Build Bundler | Turbopack (via `next dev --turbopack`) | Bundled with Next 15 |
+| Linter | ESLint | ^9 |
+
+---
+
+## 3. Project Structure
+
+```
+d:/Education for All/web/eduforall/
+├── public/
+│   └── images/
+│       ├── hero/hero.jpg         # Full-page hero background image
+│       └── logo.png              # Organisation logo (42x42px)
+├── src/
+│   ├── app/
+│   │   ├── layout.tsx            # Root layout: Nav + Footer + Google Font
+│   │   ├── globals.css           # Global base styles
+│   │   ├── page.tsx              # Home page (Client Component)
+│   │   ├── about/
+│   │   │   └── page.tsx          # About Us page (Client Component)
+│   │   ├── gallery/
+│   │   │   └── page.tsx          # Gallery page (Client Component)
+│   │   ├── contact/
+│   │   │   └── page.tsx          # Contact form page (Client Component)
+│   │   ├── donate/
+│   │   │   └── page.tsx          # Donation page (Client Component)
+│   │   ├── admin/
+│   │   │   ├── layout.tsx        # Admin-specific layout
+│   │   │   ├── page.tsx          # Full Admin dashboard (Client Component)
+│   │   │   └── gallery/          # Admin gallery sub-section
+│   │   └── api/
+│   │       ├── contact/
+│   │       │   ├── route.ts      # POST: Submit contact form → MongoDB
+│   │       │   ├── queries/
+│   │       │   │   └── route.ts  # GET: All contact queries for admin
+│   │       │   └── queries/[id]/
+│   │       │       └── route.ts  # DELETE: Single contact query by ID
+│   │       ├── gallery-list/
+│   │       │   └── route.ts      # GET: List all Cloudinary gallery images
+│   │       ├── gallery-upload/
+│   │       │   └── route.ts      # POST: Upload images → Cloudinary
+│   │       ├── gallery-delete/
+│   │       │   └── route.ts      # POST: Delete images from Cloudinary
+│   │       ├── get-settings/
+│   │       │   └── route.ts      # GET: Retrieve UPI/QR settings from MongoDB
+│   │       ├── save-settings/
+│   │       │   └── route.ts      # POST: Upsert UPI/QR settings in MongoDB
+│   │       ├── upload-qr/
+│   │       │   └── route.ts      # POST: Upload QR code image → Cloudinary
+│   │       ├── remove-qr/
+│   │       │   └── route.ts      # POST: Remove QR code from Cloudinary
+│   │       └── test-cloudinary/
+│   │           └── route.ts      # GET: Diagnostic Cloudinary connectivity test
+│   ├── components/
+│   │   └── Navigation.tsx        # Responsive navbar with scroll behavior
+│   ├── lib/
+│   │   ├── mongodb.ts            # MongoDB connection singleton with pooling
+│   │   └── cloudinary.ts        # Cloudinary SDK configured singleton
+│   └── models/
+│       └── Settings.ts           # TypeScript interface for Settings document
+├── next.config.js                # Next.js image domain config (partially deprecated)
+├── next.config.ts                # Alternate config (TS format, may override above)
+├── tsconfig.json                 # TypeScript compiler options
+├── postcss.config.mjs            # PostCSS config for TailwindCSS v4
+├── eslint.config.mjs             # ESLint rules
+└── package.json                  # Dependencies and npm scripts
+```
+
+---
+
+## 4. Environment Configuration
+
+All sensitive credentials are stored in [.env.local](file:///d:/Education%20for%20All/web/eduforall/.env.local) at the project root ([/eduforall/.env.local](file:///d:/Education%20for%20All/web/eduforall/.env.local)). This file is **never committed to version control**.
+
+| Variable | Description | Example Value |
+|---|---|---|
+| `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` | Cloudinary cloud name (public, used in client code) | `windows2k63d` |
+| `CLOUDINARY_API_KEY` | Cloudinary API key (server-only) | `691434492513835` |
+| `CLOUDINARY_API_SECRET` | Cloudinary API secret (server-only) | `CxgFLsnE4e...` |
+| `MONGODB_URI` | MongoDB Atlas connection string | `mongodb+srv://...` |
+| `MONGODB_DB` | *(Optional)* Database name override | `admin-panel` |
+
+> [!CAUTION]
+> The `CLOUDINARY_API_SECRET` and `MONGODB_URI` contain credentials that grant full read/write access to both the image store and the database. These must be rotated immediately if accidentally committed to git or exposed publicly.
+
+> [!WARNING]
+> `NEXT_PUBLIC_*` prefixed variables are embedded into the browser JavaScript bundle and visible to all users. Only the `CLOUD_NAME`, which Cloudinary treats as non-secret, should have this prefix. The `API_KEY` and `API_SECRET` are correctly using non-public names.
+
+---
+
+## 5. Architecture Overview
+
+```mermaid
+graph TD
+    Browser["Browser / Client"]
+
+    subgraph "Next.js Server (Vercel / Node)"
+        Nav["Navigation.tsx\n(Client Component)"]
+        Home["/ Home Page\n(Client Component)"]
+        About["/about\n(Client Component)"]
+        Gallery["/gallery\n(Client Component)"]
+        Contact["/contact\n(Client Component)"]
+        Donate["/donate\n(Client Component)"]
+        Admin["/admin\n(Client Component)"]
+
+        subgraph "API Routes (Server-only)"
+            APIGalleryList["/api/gallery-list"]
+            APIGalleryUpload["/api/gallery-upload"]
+            APIGalleryDelete["/api/gallery-delete"]
+            APIContact["/api/contact"]
+            APIContactQueries["/api/contact/queries"]
+            APIGetSettings["/api/get-settings"]
+            APISaveSettings["/api/save-settings"]
+            APIUploadQR["/api/upload-qr"]
+            APIRemoveQR["/api/remove-qr"]
+        end
+    end
+
+    subgraph "External Services"
+        Cloudinary["Cloudinary\n(Image CDN)"]
+        MongoDB["MongoDB Atlas\n(Database)"]
+    end
+
+    Browser --> Nav & Home & About & Gallery & Contact & Donate & Admin
+    Home -->|"fetch /api/gallery-list"| APIGalleryList
+    Gallery -->|"fetch /api/gallery-list"| APIGalleryList
+    Contact -->|"fetch /api/gallery-list"| APIGalleryList
+    Donate -->|"fetch /api/gallery-list\nfetch /api/get-settings"| APIGalleryList & APIGetSettings
+    About -->|"fetch /api/gallery-list"| APIGalleryList
+    Admin -->|"All API calls"| APIGalleryList & APIGalleryUpload & APIGalleryDelete & APIContact & APIContactQueries & APIGetSettings & APISaveSettings & APIUploadQR & APIRemoveQR
+
+    APIGalleryList --> Cloudinary
+    APIGalleryUpload --> Cloudinary
+    APIGalleryDelete --> Cloudinary
+    APIUploadQR --> Cloudinary
+    APIRemoveQR --> Cloudinary
+
+    APIContact --> MongoDB
+    APIContactQueries --> MongoDB
+    APIGetSettings --> MongoDB
+    APISaveSettings --> MongoDB
+```
+
+### Rendering Strategy
+
+All user-facing pages (`/`, `/about`, `/gallery`, `/contact`, `/donate`, `/admin`) are **Client Components** as indicated by the `'use client'` directive. They use `useEffect` to fetch data from API routes after the initial page render. This means:
+
+- The initial HTML sent to the browser contains **no dynamic data** from Cloudinary or MongoDB.
+- Images and settings appear only after client-side JavaScript runs.
+- This creates a content layout shift (CLS) effect where images appear after load.
+
+The root [layout.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/layout.tsx) is a **Server Component** that wraps all pages and injects the Navigation and Footer globally.
+
+---
+
+## 6. Pages & User-Facing Routes
+
+### 6.1 `/` — Home Page
+**File:** [src/app/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Landing page and primary call-to-action.
+
+**Sections:**
+1. **Hero Section** — Full-viewport background image (`hero.jpg`) with a 30% black overlay. Contains H1 headline with "Donate Now" and "Learn More" CTA buttons.
+2. **Get Involved Section** — Grid of three cards: Volunteer, Donate, Partner. CTAs link to `/contact` and `/donate`.
+3. **Mission Section** — Two-column layout: detailed long-form text on education in India (left, 2/3 width) + dynamic Cloudinary gallery image (right, 1/3 width).
+4. **Our Programs Section** — Two-column layout: Cloudinary gallery image (left, 1/3) + numbered list of 6 programs.
+5. **Full-Viewport Image Section** — 100vh background block using a third random Cloudinary image.
+
+**Behavior:** On mount, fetches `/api/gallery-list` and randomly selects 3 unique images for placement across sections. Uses a while-loop deduplication algorithm to ensure unique indices.
+
+---
+
+### 6.2 `/about` — About Us
+**File:** [src/app/about/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/about/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Organisation mission, founding story, programs, and volunteer CTA.
+
+**Sections:**
+1. **Main Lead** — Drop-cap intro paragraph + Cloudinary image (col-span-2 of 5).
+2. **How We Began / What We Do** — Two-column editorial grid.
+3. **Emotional Learning / Play & Expression** — Two-column editorial grid.
+4. **Two inline Cloudinary images** — Displayed in a 2-column grid.
+5. **Looking Ahead** — Vision statement section.
+6. **Volunteer CTA** — Three action buttons linking to `/contact` and `/donate`.
+
+**Behavior:** Fetches `/api/gallery-list`, shuffles the result array, and selects the first 3 for display across the page.
+
+---
+
+### 6.3 `/gallery` — Photo Gallery
+**File:** [src/app/gallery/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/gallery/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Masonry-style photo grid with full-screen modal viewer.
+
+**Layout:** CSS columns (`columns-1 sm:columns-2 md:columns-3 lg:columns-4`) with `break-inside-avoid` to create a Pinterest-style masonry flow.
+
+**Features:**
+- Lazy loading with `loading="lazy"` on all gallery images.
+- `quality={60}` for thumbnails to reduce bandwidth.
+- Click-to-expand modal: clicking any image opens a full-screen overlay with the image displayed at `quality={70}`.
+- Modal dismisses on clicking the background overlay or the × button.
+
+**Behavior:** Fetches entire `/api/gallery-list` (up to 100 images) on mount and renders all of them.
+
+---
+
+### 6.4 `/contact` — Contact Form
+**File:** [src/app/contact/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/contact/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Intake form for volunteers, partners, and general inquiries.
+
+**Form Fields:**
+| Field | Type | Validation | Options |
+|---|---|---|---|
+| Full Name | `text` | Required (HTML5) | — |
+| Phone Number | `tel` | Required (HTML5) | — |
+| Subject | `select` | Required (HTML5) | General Inquiry, Volunteer Opportunities, Partnership Opportunities, Feedback |
+| Message | `textarea` | Required (HTML5) | 4 rows |
+
+**Submission:** `POST /api/contact` with `Content-Type: application/json`. On success, shows `alert()` and resets the form. On failure, shows error `alert()`.
+
+**Layout:** Two-column (`2/3 form + 1/3 random Cloudinary gallery image`) on desktop, stacked on mobile.
+
+---
+
+### 6.5 `/donate` — Donation Page
+**File:** [src/app/donate/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/donate/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Displays UPI donation details (QR code, UPI ID, Account Name) dynamically fetched from the admin-configured database.
+
+**Behavior:**
+1. On mount, fetches `/api/get-settings` to retrieve live UPI configuration.
+2. Fetches `/api/gallery-list` and picks one random image for the right panel.
+3. Dynamically constructs a `upi://` deep link for mobile UPI apps.
+
+**Layout:** Two-column (`2/3 donation block + 1/3 Cloudinary image`) on desktop, stacked on mobile.
+
+**Conditional UI:**
+- If `qrCode` is set: displays the QR image from Cloudinary.
+- If not set: shows a dashed placeholder with instructional text.
+- If `upiId` is set: renders UPI ID, Account Name, and "Pay with UPI" deep link button.
+- If not set: shows placeholder text for each field.
+
+---
+
+### 6.6 `/admin` — Admin Dashboard
+**File:** [src/app/admin/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx)  
+**Type:** Client Component  
+**Purpose:** Internal content management dashboard for NGO staff.
+
+*(Detailed documentation in Section 11.)*
+
+---
+
+## 7. API Reference
+
+All API routes are located in `src/app/api/`. They are **server-side Next.js Route Handlers**, communicating with Cloudinary and/or MongoDB. No authentication middleware is applied at the route level.
+
+---
+
+### `GET /api/gallery-list`
+**File:** [src/app/api/gallery-list/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/gallery-list/route.ts)  
+**Purpose:** Retrieves all images in the Cloudinary `gallery/` folder.
+
+**Cache:** `export const dynamic = 'force-dynamic'` — fully bypasses Next.js cache; every request hits Cloudinary's API.
+
+**Query Parameters:** None.
+
+**Response:**
+```json
+{
+  "success": true,
+  "images": ["https://res.cloudinary.com/.../gallery/image1.jpg", "..."],
+  "count": 42
+}
+```
+
+**Error Response:** `{ "error": "Failed to fetch gallery" }` with status `500`.
+
+**Cloudinary Call:** `cloudinary.api.resources()` with `prefix: 'gallery/'`, `max_results: 100`.
+
+---
+
+### `POST /api/gallery-upload`
+**File:** [src/app/api/gallery-upload/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/gallery-upload/route.ts)  
+**Purpose:** Accepts multipart form data and uploads one or more images to Cloudinary under the `gallery/` folder.
+
+**Request:** `multipart/form-data` with field name `files` (supports multiple files).
+
+**Accepted Formats:** `jpg`, `jpeg`, `png`, `gif`, `webp`.
+
+**Cloudinary Transformations on Upload:**
+- `quality: 'auto:good'`
+- `fetch_format: 'auto'` (serves WebP to supporting browsers)
+- `width: 'auto', crop: 'scale'`
+
+**Response:**
+```json
+{
+  "success": true,
+  "images": ["https://res.cloudinary.com/.../w_auto,q_auto,f_auto/gallery/..."],
+  "count": 45
+}
+```
+
+---
+
+### `POST /api/gallery-delete`
+**File:** `src/app/api/gallery-delete/route.ts`  
+**Purpose:** Deletes one or more images from Cloudinary by their `secure_url`.
+
+**Request Body:**
+```json
+{ "images": ["https://res.cloudinary.com/.../gallery/img1.jpg"] }
+```
+
+**Response:**
+```json
+{ "success": true }
+```
+
+---
+
+### `POST /api/contact`
+**File:** [src/app/api/contact/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/contact/route.ts)  
+**Purpose:** Receives contact form submissions and inserts them into MongoDB.
+
+**Request Body:**
+```json
+{
+  "fullName": "Ravi Sharma",
+  "phoneNumber": "9876543210",
+  "subject": "volunteer",
+  "message": "I would like to volunteer..."
+}
+```
+
+**Validation:** Checks all four fields are non-empty strings. No format validation (e.g., phone regex) is applied.
+
+**MongoDB Write:** Inserts into `admin-panel` database, `contact_queries` collection with an additional `timestamp: new Date()` field.
+
+**Response:** `{ "message": "Form data submitted successfully!" }` with status `200`.
+
+---
+
+### `GET /api/contact/queries`
+**File:** `src/app/api/contact/queries/route.ts`  
+**Purpose:** Returns all stored contact queries from MongoDB for admin review.
+
+**Response:** Array of [ContactQuery](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#16-24) objects.
+
+**Access:** Unauthenticated — relies solely on URL obscurity.
+
+---
+
+### `DELETE /api/contact/queries/[id]`
+**File:** `src/app/api/contact/queries/[id]/route.ts`  
+**Purpose:** Deletes a contact query document from MongoDB by its `_id`.
+
+**Access:** Unauthenticated — relies solely on URL obscurity.
+
+---
+
+### `GET /api/get-settings`
+**File:** [src/app/api/get-settings/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/get-settings/route.ts)  
+**Purpose:** Retrieves the first settings document from the `settings` MongoDB collection.
+
+**Response:** Settings object (or `defaultSettings` if none exist):
+```json
+{
+  "upiId": "upihandle@bank",
+  "upiName": "TheEducationForAll",
+  "qrCode": "https://res.cloudinary.com/.../qr_code.png",
+  "createdAt": "...",
+  "updatedAt": "..."
+}
+```
+
+---
+
+### `POST /api/save-settings`
+**File:** [src/app/api/save-settings/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/save-settings/route.ts)  
+**Purpose:** Creates or updates the settings document (upsert pattern) in MongoDB.
+
+**Request Body:**
+```json
+{
+  "upiId": "upihandle@bank",
+  "upiName": "TheEducationForAll",
+  "qrCode": "https://..."
+}
+```
+
+**MongoDB Operation:** `updateOne({}, { $set: ... }, { upsert: true })` — always targets the first document.
+
+---
+
+### `POST /api/upload-qr`
+**File:** `src/app/api/upload-qr/route.ts`  
+**Purpose:** Uploads a QR code image to Cloudinary and returns its `secure_url`.
+
+---
+
+### `POST /api/remove-qr`
+**File:** `src/app/api/remove-qr/route.ts`  
+**Purpose:** Removes the QR code image from Cloudinary.
+
+---
+
+### `GET /api/test-cloudinary`
+**File:** `src/app/api/test-cloudinary/route.ts`  
+**Purpose:** Developer diagnostic endpoint. Tests Cloudinary connectivity and returns configuration status. Should be removed or protected before production deployment.
+
+---
+
+## 8. Data Models
+
+### 8.1 Settings (MongoDB)
+**Collection:** `settings` (in default database, determined by connection string)  
+**File:** [src/models/Settings.ts](file:///d:/Education%20for%20All/web/eduforall/src/models/Settings.ts)
+
+```typescript
+interface Settings {
+  _id?: ObjectId;      // Auto-generated by MongoDB
+  upiId: string;       // e.g. "upihandle@bank"
+  upiName: string;     // e.g. "TheEducationForAll"
+  qrCode: string | null; // Cloudinary secure_url of the QR image, or null
+  createdAt: Date;     // Set at creation/update time
+  updatedAt: Date;     // Set at creation/update time
+}
+```
+
+**Pattern:** Single-document settings store. Only one document is ever expected. The `updateOne({}, ..., { upsert: true })` pattern targets the first document found.
+
+---
+
+### 8.2 Contact Query (MongoDB)
+**Collection:** `contact_queries` (in `admin-panel` database)  
+**File:** Defined inline in [src/app/api/contact/route.ts](file:///d:/Education%20for%20All/web/eduforall/src/app/api/contact/route.ts) and typed in admin page.
+
+```typescript
+interface ContactQuery {
+  _id: string;         // MongoDB ObjectId (serialised to string)
+  fullName: string;
+  phoneNumber: string;
+  subject: string;     // One of: "general" | "volunteer" | "partnership" | "feedback"
+  message: string;
+  timestamp: Date;     // Set server-side at insert time
+}
+```
+
+---
+
+### 8.3 Cloudinary Gallery Images
+Images are not stored in MongoDB. They live in the Cloudinary account under the `gallery/` folder. The database of record for gallery images is Cloudinary itself.
+
+**URL Format:** `https://res.cloudinary.com/{cloud_name}/image/upload/{transformations}/gallery/{public_id}.{format}`
+
+**Example transformation applied:** `/upload/w_200,q_30,f_auto/` (admin thumbnails), `/upload/w_auto,q_auto,f_auto/` (public-facing).
+
+---
+
+## 9. Component Library
+
+The project has a single shared component in `src/components/`:
+
+### [Navigation.tsx](file:///d:/Education%20for%20All/web/eduforall/src/components/Navigation.tsx)
+**Type:** Client Component (`'use client'`)  
+**Purpose:** Responsive top navigation bar, fixed, present on all pages.
+
+**Props:** None. Reads `pathname` from `usePathname()`.
+
+**Behavior:**
+| Condition | Nav Background |
+|---|---|
+| On Home page (`/`), scroll position ≤ 50px | `transparent` |
+| On Home page (`/`), scroll position > 50px | `bg-black` with shadow |
+| On any other page | Always `bg-black` with shadow |
+
+**Desktop Links:** Home, About Us, Gallery, Contact Us, Donate Now (styled as CTA button).
+
+**Mobile:** A hamburger icon (SVG) opens a full-screen overlay with the same links. Overlay dismisses when a link is tapped.
+
+**Note:** There is a duplicate scroll listener in [layout.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/layout.tsx) as a `dangerouslySetInnerHTML` script tag that targets a `#main-nav` ID. This ID does not exist in the rendered DOM (the `<nav>` in [Navigation.tsx](file:///d:/Education%20for%20All/web/eduforall/src/components/Navigation.tsx) has no ID). This script is effectively a dead code path.
+
+---
+
+## 10. Third-Party Service Integrations
+
+### 10.1 MongoDB Atlas
+**SDK:** `mongodb` (native Node.js driver)  
+**File:** [src/lib/mongodb.ts](file:///d:/Education%20for%20All/web/eduforall/src/lib/mongodb.ts)
+
+The connection is managed with a singleton pattern to handle Next.js's hot-reload behaviour in development (which would otherwise exhaust connection pool limits through repeated module evaluations):
+
+```typescript
+// In development: reuse connection stored on globalThis
+if (process.env.NODE_ENV === 'development') {
+  if (!global._mongoClientPromise) {
+    client = new MongoClient(uri, { serverApi: ServerApiVersion.v1 });
+    global._mongoClientPromise = client.connect();
+  }
+  clientPromise = global._mongoClientPromise;
+} else {
+  // In production: create a module-scoped promise
+  client = new MongoClient(uri, { serverApi: ServerApiVersion.v1 });
+  clientPromise = client.connect();
+}
+```
+
+**Databases used:**
+- `admin-panel`: Stores `contact_queries` collection.
+- Default database (from URI): Stores `settings` collection.
+
+**Note:** `export const db = client.db(process.env.MONGODB_DB)` at the bottom of [mongodb.ts](file:///d:/Education%20for%20All/web/eduforall/src/lib/mongodb.ts) references `client` before it is necessarily connected in all code paths (particularly the development branch where `global._mongoClientPromise` is used). This is a latent bug that may surface if `db` export is used before the promise resolves.
+
+---
+
+### 10.2 Cloudinary
+**SDK:** `cloudinary` (v2 SDK, `v2 as cloudinary`)  
+**File:** [src/lib/cloudinary.ts](file:///d:/Education%20for%20All/web/eduforall/src/lib/cloudinary.ts)
+
+**Configured once** with `CLOUD_NAME`, `API_KEY`, and `API_SECRET`. Throws descriptive errors at module-load time if any variable is missing, which surfaces as a 500 error on the first API route that imports it.
+
+**Note:** Several API routes (`gallery-upload`, `gallery-list`) also call `cloudinary.config()` redundantly. This has no side effects since re-configuring with the same values is idempotent, but creates code duplication.
+
+**Folder structure in Cloudinary account:**
+```
+root/
+└── gallery/       # All public event and field photographs
+```
+The QR code image is presumably uploaded to a separate path by `/api/upload-qr`.
+
+---
+
+### 10.3 Razorpay
+The `razorpay` package (`^2.9.6`) is declared as a dependency in [package.json](file:///d:/Education%20for%20All/web/eduforall/package.json) but no `razorpay`-specific API routes or server-side Razorpay order creation has been found in the codebase. The current donation flow uses a pure UPI deep link (`upi://pay?pa=...`) rather than Razorpay's payment gateway. This package may be a planned future integration or a legacy artifact.
+
+---
+
+### 10.4 Next.js Image Optimisation
+**Config file:** [next.config.js](file:///d:/Education%20for%20All/web/eduforall/next.config.js)
+
+```js
+images: {
+  remotePatterns: [
+    { protocol: 'https', hostname: 'picsum.photos' }
+  ],
+  domains: ['res.cloudinary.com'],  // DEPRECATED
+}
+```
+
+The `images.domains` key is deprecated in Next.js 13+ and replaced by `images.remotePatterns`. The server emits a warning:
+```
+⚠ The "images.domains" configuration is deprecated. Please use "images.remotePatterns" configuration instead.
+```
+
+The `picsum.photos` hostname in `remotePatterns` appears unused in the current codebase.
+
+---
+
+## 11. Admin Panel
+
+**Route:** `/admin`  
+**File:** [src/app/admin/page.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx) (1,295 lines)  
+**Type:** Client Component  
+**Access Control:** Password-protected at client level only.
+
+### 11.1 Authentication
+
+```typescript
+const ADMIN_PASSWORD = 'Feb@2020';
+```
+
+The admin password is **hardcoded directly in the client-side JavaScript bundle**. This means:
+- Any visitor can view the password by inspecting the page source or the browser's built-in DevTools.
+- Authentication state is stored in `sessionStorage` as `admin-auth: 'true'`, which is not cryptographically signed and can be set manually in the browser.
+
+> [!CAUTION]
+> This authentication scheme provides no real security. Anyone with browser DevTools access can bypass it. See Section 12 for remediation.
+
+### 11.2 Dashboard Tabs
+
+The admin UI uses a tab-based SPA layout with four sections:
+
+| Tab | Icon | Content |
+|---|---|---|
+| Dashboard | FiHome | Overview — image count, loading status |
+| Gallery | FiImage | Upload/delete/preview images |
+| Queries | FiMessageSquare | View/delete contact form submissions |
+| Settings | FiSettings | Configure UPI ID, account name, QR code |
+
+Navigation is in a top bar on desktop and a fixed bottom bar on mobile.
+
+### 11.3 Gallery Manager (Admin)
+**Custom Hook:** [useGalleryManager()](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#25-179)
+
+**Features:**
+- Fetches gallery with cache-busting: `?t=${Date.now()}`
+- Auto-refreshes every 30 seconds via `setInterval`.
+- **Upload:** Drag-and-drop or file picker (multi-file support). Simulates a 0–20% "preparing" progress, then begins actual upload. Shows status icons (spinner → checkmark/X).
+- **Delete:** Checkbox multi-select of images. Confirmation dialog before deletion proceeds.
+- **Image preview:** Clicking an image opens a full-size preview modal.
+- Admin thumbnail optimisation: [getOptimizedImageUrl()](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#9-14) transforms URLs to `w_200,q_30,f_auto` for fast admin panel rendering.
+
+### 11.4 Contact Queries Manager (Admin)
+**Custom Hook:** [useContactQueriesManager()](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#180-234)
+
+- Fetches all queries from `/api/contact/queries` on mount and every 30 seconds.
+- Displays `fullName`, `phoneNumber`, `subject`, `message`, and `timestamp`.
+- Delete button triggers a `confirm()` dialog, then calls `DELETE /api/contact/queries/[id]`.
+
+### 11.5 Settings Panel (Admin)
+
+- Form fields for UPI ID and UPI Name.
+- QR code upload: File picker → POST to `/api/upload-qr` → stores returned URL via `/api/save-settings`.
+- Remove QR: POST to `/api/remove-qr`, then clears from settings.
+- Save Settings: POST to `/api/save-settings` with current UPI ID, name, and QR URL.
+
+---
+
+## 12. Security Considerations
+
+| Risk | Severity | Detail |
+|---|---|---|
+| Hardcoded admin password in client JS | **Critical** | `ADMIN_PASSWORD = 'Feb@2020'` visible to anyone in DevTools. Must be replaced with server-side authentication (e.g., NextAuth.js or JWT cookie). |
+| All admin API routes unprotected | **Critical** | `/api/contact/queries`, `/api/gallery-upload`, `/api/gallery-delete`, `/api/save-settings` are publicly accessible with no auth token requirement. A bad actor can delete all gallery images or dump all contact data. |
+| `sessionStorage` auth token trivially forgeable | **High** | Setting `sessionStorage.setItem('admin-auth', 'true')` in DevTools grants full admin access. |
+| No rate limiting on `/api/contact` | **Medium** | Allows unlimited spam form submissions, filling the MongoDB collection at no cost to the attacker. |
+| No input sanitisation in `/api/contact` | **Medium** | Fields are stored raw. If rendered in admin without HTML escaping, stored XSS is possible. |
+| `/api/test-cloudinary` publicly accessible | **Medium** | Exposes Cloudinary configuration status. Should be removed for production. |
+| `images.domains` deprecation | **Low** | Deprecated config; does not represent a security issue but will break in a future Next.js major version. |
+| Debug `console.log` statements in API routes | **Low** | `gallery-upload` and `gallery-list` log partial Cloudinary config (api key presence) to server logs. Should be removed in production. |
+
+---
+
+## 13. Known Issues & Recommendations
+
+### Issue 1: Env file location mismatch
+The original [.env](file:///d:/Education%20for%20All/web/.env) file was placed in `d:/Education for All/web/` (parent directory) instead of `d:/Education for All/web/eduforall/` (Next.js root). This caused `NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME` to not be loaded, resulting in a throw at `src/lib/cloudinary.ts:4`.
+
+**Resolution:** A [.env.local](file:///d:/Education%20for%20All/web/eduforall/.env.local) file has been created in the correct project root.
+
+### Issue 2: Dead `dangerouslySetInnerHTML` scroll script
+[layout.tsx](file:///d:/Education%20for%20All/web/eduforall/src/app/layout.tsx) includes a `<script>` tag that manipulates `document.getElementById('main-nav')`. No element with `id="main-nav"` exists in the rendered DOM. This script is dead code.
+
+**Recommendation:** Remove the `dangerouslySetInnerHTML` script block.
+
+### Issue 3: Client-side gallery fetching causes CLS
+Every page independently fetches the full list of up to 100 Cloudinary image URLs on mount, uses 1–3 of them, and discards the rest. This means:
+- Each page load makes a fresh Cloudinary Admin API call.
+- Images only appear after JavaScript runs (no SSR).
+- Images/sections shift into place after initial render.
+
+**Recommendation:** Convert image fetching to a Server Component or use Next.js ISR (`export const revalidate = 3600`) on the API route.
+
+### Issue 4: [next.config.js](file:///d:/Education%20for%20All/web/eduforall/next.config.js) deprecation warning
+`images.domains` is deprecated. Replace with `remotePatterns`.
+
+### Issue 5: `db` export bug in [mongodb.ts](file:///d:/Education%20for%20All/web/eduforall/src/lib/mongodb.ts)
+The `export const db = client.db(...)` at line 33 references the module-level `client` variable. In the development code path, `client` may be undefined if the global cache branch is taken. This export is currently unused but could cause runtime errors if imported.
+
+### Issue 6: Admin polling every 30 seconds
+Both [useGalleryManager](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#25-179) and [useContactQueriesManager](file:///d:/Education%20for%20All/web/eduforall/src/app/admin/page.tsx#180-234) poll their respective APIs every 30 seconds via `setInterval`. If multiple admin browser tabs are open, this multiplies the load linearly.
+
+**Recommendation:** Replace polling with manual "Refresh" button clicks or use SWR/React Query for smarter caching.
+
+---
+
+## 14. Local Development Setup
+
+**Prerequisites:**
+- Node.js ≥ 18
+- npm ≥ 9
+
+**Steps:**
+
+```bash
+# 1. Navigate to the project directory
+cd "d:/Education for All/web/eduforall"
+
+# 2. Install dependencies
+npm install
+
+# 3. Create the environment file with credentials
+# Create .env.local in the eduforall/ directory with:
+# NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME=...
+# CLOUDINARY_API_KEY=...
+# CLOUDINARY_API_SECRET=...
+# MONGODB_URI=...
+
+# 4. Start the development server
+npm run dev
+
+# The site will be available at:
+# Local: http://localhost:3000
+# Network: http://192.168.x.x:3000 (varies by machine)
+```
+
+**Available Scripts:**
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Starts Turbopack dev server with hot-reload |
+| `npm run build` | Compiles production bundle |
+| `npm run start` | Serves the production bundle |
+| `npm run lint` | Runs ESLint checks |
+
+---
+
+*End of Technical Documentation*  
+*Maintained by DAKB Codeworks Ltd© — Last updated March 2026*
