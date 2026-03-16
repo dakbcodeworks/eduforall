@@ -1,12 +1,8 @@
 import { NextResponse } from 'next/server';
 import { cloudinary } from '@/lib/cloudinary';
+import { unstable_cache } from 'next/cache';
 
-// Debug: Log Cloudinary configuration
-console.log('Cloudinary Config Check:', {
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  has_api_key: !!process.env.CLOUDINARY_API_KEY,
-  has_api_secret: !!process.env.CLOUDINARY_API_SECRET
-});
+export const revalidate = 3600;
 
 // Configure Cloudinary
 cloudinary.config({
@@ -15,12 +11,8 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Force dynamic to ensure we get fresh data
-export const dynamic = 'force-dynamic';
-
-export async function GET() {
-  try {
-    // Optimize search query with specific fields and caching
+const getCachedGallery = unstable_cache(
+  async () => {
     const result = await cloudinary.api.resources({
       type: 'upload',
       prefix: 'gallery/',
@@ -33,11 +25,27 @@ export async function GET() {
     }
 
     const resources = result.resources;
+    return {
+      images: resources.map((resource: { secure_url: string }) => {
+        const url = resource.secure_url;
+        // Apply w_auto,q_auto,f_auto transformations for optimal loading
+        return url.replace('/upload/', '/upload/w_auto,q_auto,f_auto/');
+      }),
+      count: resources.length
+    };
+  },
+  ['global-gallery'],
+  { revalidate: 3600, tags: ['gallery'] }
+);
+
+export async function GET() {
+  try {
+    const data = await getCachedGallery();
 
     return NextResponse.json({
       success: true,
-      images: resources.map((resource: { secure_url: string }) => resource.secure_url),
-      count: resources.length
+      images: data.images,
+      count: data.count
     });
 
   } catch (error) {

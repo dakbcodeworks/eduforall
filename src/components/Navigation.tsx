@@ -40,7 +40,7 @@ export default function Navigation() {
             height={42}
             className="w-[42px] h-[42px]"
           />
-          <span className="text-xl font-bold text-white">TheEducationForAll</span>
+          <span className="text-xl font-bold text-white">EducationForAll</span>
         </Link>
         <div className="hidden md:flex items-center space-x-8">
           <Link href="/" className="text-white hover:text-gray-200 transition text-base font-normal">Home</Link>

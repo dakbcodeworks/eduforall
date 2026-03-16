@@ -2,14 +2,16 @@ import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { defaultSettings } from '@/models/Settings';
 
+export const revalidate = 3600;
+
 export async function GET() {
   try {
     const client = await clientPromise;
     const db = client.db();
     const collection = db.collection('settings');
 
-    // Get the first settings document
-    const settings = await collection.findOne({});
+    // Get the global settings document by explicit ID
+    const settings = await collection.findOne({ _id: 'global-settings' as any });
 
     if (!settings) {
       // If no settings exist, return default settings

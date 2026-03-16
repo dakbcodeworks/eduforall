@@ -4,8 +4,6 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { FiHome, FiImage, FiSettings, FiLogOut, FiUpload, FiTrash2, FiCheck, FiX, FiRefreshCw, FiMessageSquare } from 'react-icons/fi';
 import Image from 'next/image';
 
-const ADMIN_PASSWORD = 'Feb@2020';
-
 // Helper function to get optimized Cloudinary URL
 const getOptimizedImageUrl = (url: string) => {
   if (!url.includes('cloudinary.com')) return url;
@@ -73,29 +71,41 @@ function useGalleryManager() {
       }
 
       setUploadStatus('uploading');
-      const formData = new FormData();
-      Array.from(files).forEach(file => {
-        formData.append('files', file);
-      });
 
-      const response = await fetch('/api/gallery-upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const fileArray = Array.from(files);
+      const chunkSize = 3;
 
-      if (!response.ok) throw new Error('Upload failed');
+      for (let i = 0; i < fileArray.length; i += chunkSize) {
+        const chunk = fileArray.slice(i, i + chunkSize);
+        const formData = new FormData();
+        chunk.forEach(file => formData.append('files', file));
 
-      const data = await response.json();
-      if (data.success) {
-        setUploadStatus('complete');
-        setUploadProgress(100);
-        // Wait a moment to show completion
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        // Immediately fetch fresh data
-        await fetchGallery();
-      } else {
-        throw new Error(data.error || 'Upload failed');
+        const response = await fetch('/api/gallery-upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || `Upload failed for batch ${Math.floor(i / chunkSize) + 1}`);
+        }
+
+        const data = await response.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Upload failed');
+        }
+
+        // Update progress proportionally (20 to 100)
+        const progress = 20 + Math.floor(((i + chunk.length) / fileArray.length) * 80);
+        setUploadProgress(progress);
       }
+
+      setUploadStatus('complete');
+      setUploadProgress(100);
+      // Wait a moment to show completion
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Immediately fetch fresh data
+      await fetchGallery();
     } catch (err) {
       console.error('Upload error:', err);
       setError(err instanceof Error ? err.message : 'Upload failed');
@@ -234,6 +244,7 @@ function useContactQueriesManager() {
 
 export default function AdminPage() {
   const [input, setInput] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -266,9 +277,13 @@ export default function AdminPage() {
   } = useContactQueriesManager();
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && sessionStorage.getItem('admin-auth') === 'true') {
-      setAuthenticated(true);
-    }
+    // Check if user has an active session
+    fetch('/api/auth/check')
+      .then(res => {
+        if (res.ok) setAuthenticated(true);
+      })
+      .catch(() => { });
+
     // Load settings from Cloudinary
     fetch('/api/get-settings')
       .then(res => res.json())
@@ -277,23 +292,39 @@ export default function AdminPage() {
         if (data.upiName) setUpiName(data.upiName);
         if (data.qrCode) setQrCode(data.qrCode);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (input === ADMIN_PASSWORD) {
-      setAuthenticated(true);
-      if (typeof window !== 'undefined') {
-        sessionStorage.setItem('admin-auth', 'true');
+    setIsLoggingIn(true);
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: input }),
+      });
+
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setAuthenticated(true);
+        setInput('');
+      } else {
+        alert(data.error || 'Incorrect password');
       }
-    } else {
-      alert('Incorrect password');
+    } catch {
+      alert('Login failed. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const handleLogout = () => {
-    sessionStorage.removeItem('admin-auth');
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch (e) {
+      console.error(e);
+    }
     setAuthenticated(false);
   };
 
@@ -322,9 +353,10 @@ export default function AdminPage() {
               </div>
               <button
                 type="submit"
-                className="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition"
+                disabled={isLoggingIn}
+                className="w-full bg-black text-white py-2 rounded-lg hover:bg-gray-800 transition disabled:opacity-50"
               >
-                Login
+                {isLoggingIn ? 'Logging in...' : 'Login'}
               </button>
             </form>
           </div>
@@ -384,9 +416,8 @@ export default function AdminPage() {
                 setActiveTab('dashboard');
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${
-                activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                }`}
             >
               <FiHome className="w-5 h-5 mr-3" />
               Dashboard
@@ -396,9 +427,8 @@ export default function AdminPage() {
                 setActiveTab('gallery');
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${
-                activeTab === 'gallery' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${activeTab === 'gallery' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                }`}
             >
               <FiImage className="w-5 h-5 mr-3" />
               Gallery
@@ -408,9 +438,8 @@ export default function AdminPage() {
                 setActiveTab('queries');
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${
-                activeTab === 'queries' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${activeTab === 'queries' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                }`}
             >
               <FiMessageSquare className="w-5 h-5 mr-3" />
               Queries
@@ -420,9 +449,8 @@ export default function AdminPage() {
                 setActiveTab('settings');
                 setIsMobileMenuOpen(false);
               }}
-              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${
-                activeTab === 'settings' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
-              }`}
+              className={`w-full flex items-center px-4 py-3 rounded-lg transition ${activeTab === 'settings' ? 'bg-blue-50 text-blue-600' : 'text-gray-600 hover:bg-gray-50'
+                }`}
             >
               <FiSettings className="w-5 h-5 mr-3" />
               Settings
@@ -441,13 +469,13 @@ export default function AdminPage() {
       {/* Main Content */}
       <main className="p-4 md:p-8">
         {activeTab === 'dashboard' && (
-          <DashboardOverview 
-            galleryCount={images.length} 
+          <DashboardOverview
+            galleryCount={images.length}
             isLoading={loading}
           />
         )}
         {activeTab === 'gallery' && (
-          <GalleryManager 
+          <GalleryManager
             images={images}
             isLoading={loading}
             error={error}
@@ -465,7 +493,7 @@ export default function AdminPage() {
           />
         )}
         {activeTab === 'queries' && (
-          <ContactQueriesManager 
+          <ContactQueriesManager
             queries={queries}
             loadingQueries={loadingQueries}
             queriesError={queriesError}
@@ -473,7 +501,7 @@ export default function AdminPage() {
           />
         )}
         {activeTab === 'settings' && (
-          <SettingsPanel 
+          <SettingsPanel
             upiId={upiId}
             setUpiId={setUpiId}
             upiName={upiName}
@@ -490,36 +518,32 @@ export default function AdminPage() {
         <div className="grid grid-cols-4 h-16">
           <button
             onClick={() => setActiveTab('dashboard')}
-            className={`flex flex-col items-center justify-center ${
-              activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center ${activeTab === 'dashboard' ? 'text-blue-600' : 'text-gray-600'
+              }`}
           >
             <FiHome className="w-6 h-6" />
             <span className="text-xs mt-1">Home</span>
           </button>
           <button
             onClick={() => setActiveTab('gallery')}
-            className={`flex flex-col items-center justify-center ${
-              activeTab === 'gallery' ? 'text-blue-600' : 'text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center ${activeTab === 'gallery' ? 'text-blue-600' : 'text-gray-600'
+              }`}
           >
             <FiImage className="w-6 h-6" />
             <span className="text-xs mt-1">Gallery</span>
           </button>
           <button
             onClick={() => setActiveTab('queries')}
-            className={`flex flex-col items-center justify-center ${
-              activeTab === 'queries' ? 'text-blue-600' : 'text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center ${activeTab === 'queries' ? 'text-blue-600' : 'text-gray-600'
+              }`}
           >
             <FiMessageSquare className="w-6 h-6" />
             <span className="text-xs mt-1">Queries</span>
           </button>
           <button
             onClick={() => setActiveTab('settings')}
-            className={`flex flex-col items-center justify-center ${
-              activeTab === 'settings' ? 'text-blue-600' : 'text-gray-600'
-            }`}
+            className={`flex flex-col items-center justify-center ${activeTab === 'settings' ? 'text-blue-600' : 'text-gray-600'
+              }`}
           >
             <FiSettings className="w-6 h-6" />
             <span className="text-xs mt-1">Settings</span>
@@ -530,7 +554,7 @@ export default function AdminPage() {
   );
 }
 
-function GalleryManager({ 
+function GalleryManager({
   images,
   isLoading,
   error,
@@ -545,7 +569,7 @@ function GalleryManager({
   handleUpload,
   handleDelete,
   fetchGallery,
-}: { 
+}: {
   images: string[];
   isLoading: boolean;
   error: string | null;
@@ -584,12 +608,12 @@ function GalleryManager({
 
   const handleDeleteClick = async () => {
     if (selected.length === 0) return;
-    
+
     // Show confirmation dialog
     const confirmed = window.confirm(
       `Are you sure you want to delete ${selected.length} image${selected.length > 1 ? 's' : ''}?\nThis action cannot be undone.`
     );
-    
+
     if (confirmed) {
       await handleDelete();
     }
@@ -609,7 +633,7 @@ function GalleryManager({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
       setSelectedFiles(e.dataTransfer.files);
     }
@@ -704,12 +728,11 @@ function GalleryManager({
       )}
 
       <div className="bg-white rounded-xl shadow-sm p-6 border border-black">
-        <div 
-          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${
-            dragActive 
-              ? 'border-black bg-gray-50' 
-              : 'border-gray-300 hover:border-black'
-          }`}
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors duration-200 ${dragActive
+            ? 'border-black bg-gray-50'
+            : 'border-gray-300 hover:border-black'
+            }`}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -723,26 +746,25 @@ function GalleryManager({
             onChange={handleFileSelect}
             className="hidden"
           />
-          
+
           <div className="space-y-4">
             <div className="flex flex-col items-center">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors duration-200 ${
-                uploadStatus === 'complete' ? 'bg-green-100' :
+              <div className={`w-16 h-16 rounded-full flex items-center justify-center mb-4 transition-colors duration-200 ${uploadStatus === 'complete' ? 'bg-green-100' :
                 uploadStatus === 'error' ? 'bg-red-100' :
-                uploadStatus === 'uploading' || uploadStatus === 'preparing' ? 'bg-blue-100' :
-                'bg-gray-100'
-              }`}>
+                  uploadStatus === 'uploading' || uploadStatus === 'preparing' ? 'bg-blue-100' :
+                    'bg-gray-100'
+                }`}>
                 {uploadStatus === 'complete' ? <FiCheck className="w-8 h-8 text-green-600" /> :
-                 uploadStatus === 'error' ? <FiX className="w-8 h-8 text-red-600" /> :
-                 uploadStatus === 'uploading' || uploadStatus === 'preparing' ? <FiRefreshCw className="w-8 h-8 text-blue-600 animate-spin" /> :
-                 <FiUpload className="w-8 h-8 text-gray-400" />
+                  uploadStatus === 'error' ? <FiX className="w-8 h-8 text-red-600" /> :
+                    uploadStatus === 'uploading' || uploadStatus === 'preparing' ? <FiRefreshCw className="w-8 h-8 text-blue-600 animate-spin" /> :
+                      <FiUpload className="w-8 h-8 text-gray-400" />
                 }
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-1">
                 {selectedFiles ? 'Files Selected' : 'Upload Images'}
               </h3>
               <p className="text-sm text-gray-500 mb-4">
-                {selectedFiles 
+                {selectedFiles
                   ? `${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} selected`
                   : 'Drag and drop your images here, or click to browse'}
               </p>
@@ -765,11 +787,10 @@ function GalleryManager({
                   <button
                     onClick={handleUploadClick}
                     disabled={uploadStatus === 'uploading' || uploadStatus === 'preparing'}
-                    className={`inline-flex items-center px-6 py-3 rounded-lg transition ${
-                      uploadStatus === 'complete' ? 'bg-green-600 text-white hover:bg-green-700' :
+                    className={`inline-flex items-center px-6 py-3 rounded-lg transition ${uploadStatus === 'complete' ? 'bg-green-600 text-white hover:bg-green-700' :
                       uploadStatus === 'error' ? 'bg-red-600 text-white hover:bg-red-700' :
-                      'bg-black text-white hover:bg-white hover:text-black border border-black'
-                    } disabled:opacity-50`}
+                        'bg-black text-white hover:bg-white hover:text-black border border-black'
+                      } disabled:opacity-50`}
                   >
                     {getUploadButtonIcon()}
                     {getUploadButtonText()}
@@ -788,20 +809,19 @@ function GalleryManager({
                     <div className="flex justify-between text-sm text-gray-600 mb-1">
                       <span>
                         {uploadStatus === 'preparing' ? 'Preparing files...' :
-                         uploadStatus === 'uploading' ? 'Uploading...' :
-                         uploadStatus === 'complete' ? 'Upload complete!' :
-                         uploadStatus === 'error' ? 'Upload failed' :
-                         'Ready to upload'}
+                          uploadStatus === 'uploading' ? 'Uploading...' :
+                            uploadStatus === 'complete' ? 'Upload complete!' :
+                              uploadStatus === 'error' ? 'Upload failed' :
+                                'Ready to upload'}
                       </span>
                       <span>{uploadProgress}%</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className={`h-2 rounded-full transition-all duration-300 ${
-                          uploadStatus === 'complete' ? 'bg-green-600' :
+                        className={`h-2 rounded-full transition-all duration-300 ${uploadStatus === 'complete' ? 'bg-green-600' :
                           uploadStatus === 'error' ? 'bg-red-600' :
-                          'bg-black'
-                        }`}
+                            'bg-black'
+                          }`}
                         style={{ width: `${uploadProgress}%` }}
                       />
                     </div>
@@ -829,11 +849,10 @@ function GalleryManager({
                 <button
                   onClick={handleDeleteClick}
                   disabled={deleteStatus === 'deleting'}
-                  className={`inline-flex items-center px-4 py-2 rounded-lg transition ${
-                    deleteStatus === 'complete' ? 'bg-green-600 text-white hover:bg-green-700' :
+                  className={`inline-flex items-center px-4 py-2 rounded-lg transition ${deleteStatus === 'complete' ? 'bg-green-600 text-white hover:bg-green-700' :
                     deleteStatus === 'error' ? 'bg-red-600 text-white hover:bg-red-700' :
-                    'bg-red-600 text-white hover:bg-red-700'
-                  } disabled:opacity-50`}
+                      'bg-red-600 text-white hover:bg-red-700'
+                    } disabled:opacity-50`}
                 >
                   {getDeleteButtonIcon()}
                   {getDeleteButtonText()}
@@ -846,11 +865,10 @@ function GalleryManager({
             {images.map(img => (
               <div
                 key={img}
-                className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                  selected.includes(img) 
-                    ? 'border-red-600 ring-2 ring-red-600 ring-opacity-50' 
-                    : 'border-transparent hover:border-gray-300'
-                }`}
+                className={`relative group rounded-lg overflow-hidden border-2 transition-all duration-200 ${selected.includes(img)
+                  ? 'border-red-600 ring-2 ring-red-600 ring-opacity-50'
+                  : 'border-transparent hover:border-gray-300'
+                  }`}
               >
                 <div
                   className="relative w-full pt-[100%] cursor-pointer"
@@ -870,13 +888,12 @@ function GalleryManager({
                     sizes="(max-width: 768px) 100vw, 20vw"
                     loading="lazy"
                   />
-                  
+
                   {/* Selection Checkbox */}
-                  <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${
-                    selected.includes(img)
-                      ? 'bg-red-600'
-                      : 'bg-white bg-opacity-50 group-hover:bg-opacity-100'
-                  }`}>
+                  <div className={`absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center transition-all duration-200 ${selected.includes(img)
+                    ? 'bg-red-600'
+                    : 'bg-white bg-opacity-50 group-hover:bg-opacity-100'
+                    }`}>
                     {selected.includes(img) ? (
                       <FiCheck className="w-4 h-4 text-white" />
                     ) : (
@@ -904,19 +921,18 @@ function GalleryManager({
               <div className="flex justify-between text-sm text-gray-600 mb-1">
                 <span>
                   {deleteStatus === 'deleting' ? 'Deleting images...' :
-                   deleteStatus === 'complete' ? 'Deletion complete!' :
-                   deleteStatus === 'error' ? 'Deletion failed' :
-                   'Ready to delete'}
+                    deleteStatus === 'complete' ? 'Deletion complete!' :
+                      deleteStatus === 'error' ? 'Deletion failed' :
+                        'Ready to delete'}
                 </span>
                 <span>{deleteProgress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
-                  className={`h-2 rounded-full transition-all duration-300 ${
-                    deleteStatus === 'complete' ? 'bg-green-600' :
+                  className={`h-2 rounded-full transition-all duration-300 ${deleteStatus === 'complete' ? 'bg-green-600' :
                     deleteStatus === 'error' ? 'bg-red-600' :
-                    'bg-red-600'
-                  }`}
+                      'bg-red-600'
+                    }`}
                   style={{ width: `${deleteProgress}%` }}
                 />
               </div>
@@ -978,15 +994,15 @@ function DashboardOverview({ galleryCount, isLoading }: { galleryCount: number, 
   );
 }
 
-function SettingsPanel({ 
-  upiId, 
-  setUpiId, 
-  upiName, 
-  setUpiName, 
-  qrCode, 
+function SettingsPanel({
+  upiId,
+  setUpiId,
+  upiName,
+  setUpiName,
+  qrCode,
   setQrCode,
   handleLogout,
-}: { 
+}: {
   upiId: string;
   setUpiId: (value: string) => void;
   upiName: string;
@@ -998,11 +1014,11 @@ function SettingsPanel({
   const handleQRUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
+
     try {
       const formData = new FormData();
       formData.append('qr', file);
-      
+
       const res = await fetch('/api/upload-qr', {
         method: 'POST',
         body: formData,
@@ -1124,11 +1140,11 @@ function SettingsPanel({
             {qrCode ? (
               <div className="space-y-4">
                 <div className="relative w-48 h-48 mx-auto">
-                  <Image 
-                    src={qrCode} 
-                    alt="UPI QR Code" 
+                  <Image
+                    src={qrCode}
+                    alt="UPI QR Code"
                     fill
-                    className="object-contain rounded-lg border border-black" 
+                    className="object-contain rounded-lg border border-black"
                   />
                 </div>
                 <button

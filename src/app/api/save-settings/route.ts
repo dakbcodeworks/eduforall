@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import clientPromise from '@/lib/mongodb';
 import { Settings } from '@/models/Settings';
+import { revalidatePath } from 'next/cache';
 
 export async function POST(req: Request) {
   try {
@@ -27,9 +28,9 @@ export async function POST(req: Request) {
     const db = client.db();
     const collection = db.collection('settings');
 
-    // Update or insert settings
+    // Update or insert settings explicitly by global ID
     const result = await collection.updateOne(
-      {}, // Match any document
+      { _id: 'global-settings' as any }, // Match exact document
       { $set: validatedSettings },
       { upsert: true }
     );
@@ -38,14 +39,19 @@ export async function POST(req: Request) {
       throw new Error('Failed to save settings');
     }
 
-    return NextResponse.json({ 
+    // Revalidate critical paths using these settings
+    revalidatePath('/');
+    revalidatePath('/admin');
+    revalidatePath('/donate');
+
+    return NextResponse.json({
       success: true,
       settings: validatedSettings
     });
 
   } catch (error) {
     console.error('Settings save error:', error);
-    return NextResponse.json({ 
+    return NextResponse.json({
       error: 'Failed to save settings',
       message: error instanceof Error ? error.message : 'Unknown error'
     }, { status: 500 });

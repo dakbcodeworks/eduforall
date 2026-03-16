@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { v2 as cloudinary } from 'cloudinary';
-
-// Debug: Log Cloudinary configuration
-console.log('Cloudinary Config Check:', {
-  cloud_name: process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME,
-  has_api_key: !!process.env.CLOUDINARY_API_KEY,
-  has_api_secret: !!process.env.CLOUDINARY_API_SECRET
-});
+import { revalidateTag } from 'next/cache';
 
 // Configure Cloudinary
 cloudinary.config({
@@ -69,20 +63,12 @@ export async function POST(request: NextRequest) {
     // Wait for all uploads to complete
     await Promise.all(uploadPromises);
 
-    // Get the updated gallery list with optimized query
-    const galleryResult = await cloudinary.search
-      .expression('folder:gallery/*')
-      .sort_by('created_at', 'desc')
-      .max_results(100)
-      .execute();
+    // Revalidate the cache tagging for the gallery
+    revalidateTag('gallery');
 
     return NextResponse.json({
       success: true,
-      images: galleryResult.resources.map((resource: CloudinaryResource) => {
-        const url = resource.secure_url;
-        return url.replace('/upload/', '/upload/w_auto,q_auto,f_auto/');
-      }),
-      count: galleryResult.resources.length
+      message: 'Upload successful'
     });
   } catch (error) {
     console.error('Error uploading files:', error);

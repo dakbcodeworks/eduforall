@@ -1,7 +1,6 @@
-'use client';
 import Link from "next/link";
-import { useEffect, useState } from "react";
 import Image from 'next/image';
+import { cloudinary } from '@/lib/cloudinary';
 
 const programs = [
   {
@@ -30,51 +29,69 @@ const programs = [
   }
 ];
 
+export const revalidate = 3600;
 
-export default function Home() {
-  const [galleryImage, setGalleryImage] = useState<string | null>(null);
-  const [programsImage, setProgramsImage] = useState<string | null>(null);
-  const [fullHeightImage, setFullHeightImage] = useState<string | null>(null);
-  useEffect(() => {
-    fetch('/api/gallery-list')
-      .then(res => res.json())
-      .then(data => {
-        if (data.images && data.images.length > 0) {
-          const random1 = Math.floor(Math.random() * data.images.length);
-          let random2 = random1;
-          let random3 = random1;
+async function fetchGalleryImages() {
+  try {
+    const result = await cloudinary.api.resources({
+      type: 'upload',
+      prefix: 'gallery/',
+      max_results: 100,
+      fields: 'secure_url'
+    });
 
-          if (data.images.length > 1) {
-            while (random2 === random1) {
-              random2 = Math.floor(Math.random() * data.images.length);
-            }
-          }
-          if (data.images.length > 2) {
-            while (random3 === random1 || random3 === random2) {
-              random3 = Math.floor(Math.random() * data.images.length);
-            }
-          }
-          setGalleryImage(data.images[random1]);
-          setProgramsImage(data.images[random2]);
-          setFullHeightImage(data.images[random3]);
-        }
+    if (result && result.resources && result.resources.length > 0) {
+      return result.resources.map((r: any) => {
+        return r.secure_url.replace('/upload/', '/upload/w_auto,q_auto,f_auto/');
       });
-  }, []);
+    }
+  } catch (error) {
+    console.error('Error fetching gallery images on server:', error);
+  }
+  return [];
+}
+
+export default async function Home() {
+  const images = await fetchGalleryImages();
+
+  let galleryImage = null;
+  let programsImage = null;
+  let fullHeightImage = null;
+
+  if (images.length > 0) {
+    const random1 = Math.floor(Math.random() * images.length);
+    let random2 = random1;
+    let random3 = random1;
+
+    if (images.length > 1) {
+      while (random2 === random1) {
+        random2 = Math.floor(Math.random() * images.length);
+      }
+    }
+    if (images.length > 2) {
+      while (random3 === random1 || random3 === random2) {
+        random3 = Math.floor(Math.random() * images.length);
+      }
+    }
+    galleryImage = images[random1];
+    programsImage = images[random2];
+    fullHeightImage = images[random3];
+  }
 
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
-      <section
-        className="relative flex items-center h-screen text-white -mt-[72px]"
-        style={{
-          backgroundImage: "url('/images/hero/hero.jpg')",
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-        }}
-      >
+      <section className="relative flex items-center h-screen text-white -mt-[72px] overflow-hidden">
+        <Image
+          src="/images/hero/hero.jpg"
+          alt="Hero Background"
+          fill
+          priority
+          className="object-cover object-center absolute inset-0 z-0"
+          quality={80}
+        />
         {/* 30% Opacity Black Overlay */}
-        <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.3)' }}></div>
+        <div className="absolute inset-0 z-0" style={{ background: 'rgba(0,0,0,0.3)' }}></div>
         {/* Content */}
         <div className="relative z-10 px-6 w-full flex flex-col items-start justify-center text-left max-w-3xl">
           <h1 className="text-4xl md:text-6xl font-bold mb-6 drop-shadow-lg">
@@ -191,7 +208,7 @@ export default function Home() {
               </p>
               <div className="grid grid-cols-1 gap-0 w-full">
                 {programs.map((prog, i) => (
-                  <div key={i} className={`flex flex-col justify-start border-b border-slate-200 bg-white p-4 md:p-6 last:border-b-0`}> 
+                  <div key={i} className={`flex flex-col justify-start border-b border-slate-200 bg-white p-4 md:p-6 last:border-b-0`}>
                     <div className="flex items-center mb-2">
                       <div className="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-lg font-bold mr-3">{i + 1}</div>
                       <h3 className="text-lg font-bold text-slate-900">{prog.title}</h3>
