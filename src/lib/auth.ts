@@ -1,4 +1,4 @@
-import { jwtVerify, SignJWT } from 'jose';
+import { jwtVerify, SignJWT, type JWTPayload } from 'jose';
 
 export const getJwtSecretKey = () => {
     const secret = process.env.JWT_SECRET;
@@ -17,12 +17,12 @@ export const verifyAuth = async (token: string) => {
             new TextEncoder().encode(getJwtSecretKey())
         );
         return verified.payload;
-    } catch (err) {
+    } catch {
         throw new Error('Your token has expired or is invalid.');
     }
 };
 
-export const createToken = async (payload: any) => {
+export const createToken = async (payload: JWTPayload) => {
     const secret = new TextEncoder().encode(getJwtSecretKey());
     const alg = 'HS256';
 

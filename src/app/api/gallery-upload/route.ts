@@ -11,12 +11,6 @@ cloudinary.config({
 
 export const dynamic = 'force-dynamic';
 
-interface CloudinaryResource {
-  secure_url: string;
-  public_id: string;
-  created_at: string;
-}
-
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();

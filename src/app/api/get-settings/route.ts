@@ -11,7 +11,7 @@ export async function GET() {
     const collection = db.collection('settings');
 
     // Get the global settings document by explicit ID
-    const settings = await collection.findOne({ _id: 'global-settings' as any });
+    const settings = await collection.findOne({ _id: 'global-settings' as unknown as import('mongodb').InferIdType<import('mongodb').Document> });
 
     if (!settings) {
       // If no settings exist, return default settings

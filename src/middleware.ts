@@ -30,7 +30,7 @@ export async function middleware(req: NextRequest) {
             await verifyAuth(token);
             // If token is valid, continue
             return NextResponse.next();
-        } catch (err) {
+        } catch {
             return NextResponse.json(
                 { error: 'Unauthorized: Invalid or expired token' },
                 { status: 401 }

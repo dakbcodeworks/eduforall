@@ -13,7 +13,7 @@ export async function GET() {
 
         await verifyAuth(token);
         return NextResponse.json({ authenticated: true });
-    } catch (err) {
+    } catch {
         return NextResponse.json({ authenticated: false }, { status: 401 });
     }
 }

@@ -1,4 +1,4 @@
-import { MongoClient, ServerApiVersion, Db } from 'mongodb';
+import { MongoClient, ServerApiVersion } from 'mongodb';
 
 const uri = process.env.MONGODB_URI; // Your MongoDB connection string from .env.local
 

@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     // Update or insert settings explicitly by global ID
     const result = await collection.updateOne(
-      { _id: 'global-settings' as any }, // Match exact document
+      { _id: 'global-settings' as unknown as import('mongodb').InferIdType<import('mongodb').Document> },
       { $set: validatedSettings },
       { upsert: true }
     );

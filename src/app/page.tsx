@@ -41,7 +41,7 @@ async function fetchGalleryImages() {
     });
 
     if (result && result.resources && result.resources.length > 0) {
-      return result.resources.map((r: any) => {
+      return result.resources.map((r: { secure_url: string }) => {
         return r.secure_url.replace('/upload/', '/upload/w_auto,q_auto,f_auto/');
       });
     }
